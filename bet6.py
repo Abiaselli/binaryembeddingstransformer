@@ -1499,7 +1499,7 @@ class UnifiedTransformerGUI:
                     
 
                     # Compute the loss
-                    loss_fn = torch.nn.BCEWithLogitsLoss()
+                    loss_fn = torch.nn.CrossEntropyLoss()
                     loss = loss_fn(logits, targets_projected)
                     logging.info(f"Loss calculated: {loss}")
                     # Shift targets for autoregressive training
