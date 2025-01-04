@@ -1,0 +1,1 @@
+{"num_nodes": 8, "embed_size": 32, "hidden_size": 32, "num_heads": 8, "num_layers": 12, "max_seq_length": 1024, "vocab_size": 32, "architecture": "mini_transformer"}
