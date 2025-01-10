@@ -525,7 +525,7 @@ class BinaryCascadeTransformer(nn.Module):
         self.node_type = node_type
         self.num_layers=num_layers
         self.embed_size=hidden_size
-        self.output_layer = nn.Linear(vocab_size, )  # Predict binary probabilities for vocab_size binary positions.
+        self.output_layer = nn.Linear(vocab_size, 2)  # Predict binary probabilities for vocab_size binary positions.
         self.device=device
 
         if include_preprocessing_node:
@@ -575,14 +575,13 @@ class BinaryCascadeTransformer(nn.Module):
         
         return binary_embeddings, attention_weights_all_nodes
 
-
     def target_projection(self, target_input, mask=None):
         """
-        Convert a 2D tensor [seq_len, binary_len] of 0/1 bits into [seq_len, binary_len, 1].
+        Convert a tensor of shape [batch_size, seq_len, vocab_size] to [batch_size, seq_len, vocab_size, 2].
         """
-        # Make sure target_input is float for loss.
-        
-        return target_input.unsqueeze(-1)
+        target_input = target_input.unsqueeze(-1)  # Add new dimension: [batch_size, seq_len, vocab_size, 1]
+        return torch.cat((1 - target_input, target_input), dim=-1)  # Add complementary logits
+
 
 
 class BinaryEmbedding(nn.Module):
@@ -744,11 +743,24 @@ def decode_binary_sequence(binary_sequence):
         if isinstance(binary_sequence[0], list):
             binary_sequence = [bit for sublist in binary_sequence for bit in sublist]
 
+        logging.debug(f"Binary sequence before conversion: {binary_sequence}")
+
         # Ensure binary values are cast to integers
         binary_sequence = [int(bit) for bit in binary_sequence]
         binary_string = ''.join(map(str, binary_sequence))
+
+        logging.debug(f"Binary string: {binary_string}")
+
+        # Break the binary string into 8-bit bytes
         bytes_array = [binary_string[i:i + 8] for i in range(0, len(binary_string), 8)]
+
+        logging.debug(f"Bytes array: {bytes_array}")
+
+        # Convert bytes to characters
         decoded_text = ''.join(chr(int(byte, 2)) for byte in bytes_array if int(byte, 2) > 0)
+
+        logging.debug(f"Decoded text: {decoded_text}")
+
         return decoded_text
     except ValueError as e:
         logging.error(f"Error decoding binary sequence: {e}")
@@ -1625,8 +1637,8 @@ class UnifiedTransformerGUI:
                     logging.debug(f"Shape of targets_projected: {targets_projected.shape}")
 
                     # Flatten for BCEWithLogitsLoss if needed
-                    logits_flat = logits.view(-1, 1)
-                    targets_flat = targets_projected.view(-1, 1)
+                    logits_flat = logits.view(-1, 2)  # Flatten logits: [batch_size * seq_len * vocab_size, 2]
+                    targets_flat = targets_projected.view(-1)  # Flatten targets: [batch_size * seq_len * vocab_size]
 
                     # Ensure logits and targets_projected have matching dimensions
                     logging.debug(f"Logits: {logits_flat[:1]}")  # First sequence for debugging
@@ -1634,14 +1646,11 @@ class UnifiedTransformerGUI:
                     assert logits_flat.shape == targets_flat.shape, f"Shape mismatch: logits {logits_flat.shape}, targets {targets_flat.shape}"
                     logging.debug(f"Shape of logits_flat: {logits_flat.shape}")
                     logging.debug(f"Shape of targets_flat: {targets_flat.shape}")
+                    loss_fn = nn.CrossEntropyLoss()
 
-                    ##for no logits loss
-                    #with torch.no_grad():
-                    # logits in (-∞, +∞)
-                    #logits = torch.sigmoid(logits)  # map to [0,1]
-                    
-                    loss_fn = nn.BCEWithLogitsLoss()
+
                     loss = loss_fn(logits_flat, targets_flat)
+
                     logging.info(f"Loss calculated: {loss}")
 
                     loss.backward()
